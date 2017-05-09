@@ -42,23 +42,35 @@ resettingWebSocket addr pwd toSend = do
   ws <- widgetHold (return never) resets
   return $ switchPromptlyDyn ws
 
-alternateWebSocket :: MonadWidget t m => EstuaryProtocolObject -> Event t String -> Dynamic t String -> Event t EstuaryProtocol -> m (Event t EstuaryProtocol)
-alternateWebSocket obj addr pwd toSend = do
+alternateWebSocket :: MonadWidget t m => EstuaryProtocolObject -> UTCTime -> Event t String -> Dynamic t String -> Event t EstuaryProtocol -> m (Event t EstuaryProtocol)
+alternateWebSocket obj startTime addr pwd toSend = do
+  -- hack <- button "hack"
+  hack <- tickLossy (1.0::NominalDiffTime) startTime 
   let addr' = fmap ("ws://" ++) addr
   performEvent_ $ fmap (liftIO . (setUrl obj)) addr'
   let toSend' = attachDynWith setPassword pwd toSend
   let toSend'' = fmap (encode) toSend'
   performEvent_ $ fmap (liftIO . (send obj)) toSend''
+  estuaryEdits <- performEvent $ fmap (liftIO . (\_ -> getEstuaryEdit obj 1)) hack
+  textEdits <- performEvent $ fmap (liftIO . (\_ -> getTextEdit obj 2)) hack
+  el "div" $ do
+    text "estuaryEdits"
+    (holdDyn "" estuaryEdits) >>= display
+    text "textEdits"
+    (holdDyn "" textEdits) >>= display
   return never
+
+
+  -- getCurrentTime :: IO UTCTime
 
 -- finally, a webSocketWidget includes GUI elements for setting the webSocket address and
 -- password, and connects these GUI elements to a resettingWebSocket (i.e. estuaryWebSocket)
 
-webSocketWidget :: MonadWidget t m => EstuaryProtocolObject -> Event t EstuaryProtocol -> m (Event t EstuaryProtocol)
-webSocketWidget obj toSend = do
+webSocketWidget :: MonadWidget t m => EstuaryProtocolObject -> UTCTime -> Event t EstuaryProtocol -> m (Event t EstuaryProtocol)
+webSocketWidget obj startTime toSend = do
   addr <- textInput $ def & textInputConfig_initialValue .~ "127.0.0.1:8002"
   let addr' = tagDyn (_textInput_value addr) (_textInput_keypress addr)
   pwd <- textInput $ def & textInputConfig_initialValue .~ "blah"
   let pwd' = _textInput_value pwd
-  alternateWebSocket obj addr' pwd' toSend
+  alternateWebSocket obj startTime addr' pwd' toSend
   -- resettingWebSocket addr' pwd' toSend

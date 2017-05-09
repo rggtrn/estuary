@@ -1,3 +1,5 @@
+{-# LANGUAGE RecursiveDo, OverloadedStrings #-}
+
 module Estuary.Widgets.PatternTransformer where
 
 import Reflex
@@ -7,6 +9,7 @@ import Estuary.Reflex.Utility
 import Data.Map
 import Text.Read
 import GHC.Real
+import qualified Data.Text as T
 
 
 paramWidget::MonadWidget t m=>PatternTransformer -> m (Dynamic t PatternTransformer)
@@ -17,7 +20,7 @@ paramWidget (Jux trans) = do
 paramWidget (Every num trans) = do
   input <- textInput $ def & textInputConfig_attributes .~ (constDyn ("type"=:"number"))
   let input' = _textInput_value input -- Dyn string
-  val <- forDyn input' (\x->maybe 1 id (readMaybe x::Maybe Int))
+  val <- forDyn input' (\x-> maybe 1 id ((readMaybe . T.unpack) x::Maybe Int))
   nextTrans <- parameteredPatternTransformer trans never
   val'<-combineDyn (\k (next,_)-> Every k next) val nextTrans
   return val'
@@ -26,27 +29,27 @@ paramWidget (Slow _) = do
   let input' = _textInput_value input -- Dyn string
   input2 <- textInput $ def & textInputConfig_attributes .~ (constDyn (fromList $ zip ["type","style"] ["number","width:30px"])) & textInputConfig_initialValue .~ ("1")
   let input2' = _textInput_value input2 -- Dyn string
-  val <- forDyn input' (\x->maybe 1 id (readMaybe x::Maybe Integer))
-  val2 <- forDyn input2' (\x-> maybe 1 id (readMaybe x::Maybe Integer))
+  val <- forDyn input' (\x->maybe 1 id ((readMaybe . T.unpack) x::Maybe Integer))
+  val2 <- forDyn input2' (\x-> maybe 1 id ((readMaybe . T.unpack) x::Maybe Integer))
   combineDyn (\x y->  Slow ((x%y)::Rational)) val val2
 paramWidget (Density _)= do
   input <- textInput $ def & textInputConfig_attributes .~ (constDyn (fromList $ zip ["type","style"] ["number","width:30px"]))
   let input' = _textInput_value input -- Dyn string
   input2 <- textInput $ def & textInputConfig_attributes .~ (constDyn (fromList $ zip ["type","style"] ["number","width:30px"])) & textInputConfig_initialValue .~ ("1")
   let input2' = _textInput_value input2 -- Dyn string
-  val <- forDyn input' (\x->maybe 1 id (readMaybe x::Maybe Integer))
-  val2 <- forDyn input2' (\x-> maybe 1 id (readMaybe x::Maybe Integer))
+  val <- forDyn input' (\x->maybe 1 id ((readMaybe . T.unpack) x::Maybe Integer))
+  val2 <- forDyn input2' (\x-> maybe 1 id ((readMaybe . T.unpack) x::Maybe Integer))
   combineDyn (\x y-> Density $ (x%y::Rational) ) val val2
 paramWidget (DegradeBy _) = do
   input <- textInput $ def & textInputConfig_attributes .~ (constDyn ("type"=:"number"))
   let input' = _textInput_value input -- Dyn string
-  val <- forDyn input' (\x->maybe 1 id (readMaybe x::Maybe Double))
+  val <- forDyn input' (\x->maybe 1 id ((readMaybe . T.unpack) x::Maybe Double))
   val'<-forDyn val (\k-> DegradeBy k)
   return val'
 paramWidget (Chop _) = do
   input <- textInput $ def & textInputConfig_attributes .~ (constDyn ("type"=:"number"))
   let input' = _textInput_value input -- Dyn string
-  val <- forDyn input' (\x->maybe 1 id (readMaybe x::Maybe Int))
+  val <- forDyn input' (\x->maybe 1 id ((readMaybe . T.unpack) x::Maybe Int))
   val'<-forDyn val (\k-> Chop k)
   return val'
 paramWidget transformer = return $ constDyn transformer

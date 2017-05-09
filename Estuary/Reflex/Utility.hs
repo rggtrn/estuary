@@ -1,3 +1,5 @@
+{-# LANGUAGE RecursiveDo, OverloadedStrings #-}
+
 module Estuary.Reflex.Utility where
 
 import Reflex
@@ -13,6 +15,7 @@ import Control.Monad hiding (forM_) -- for 'guard'
 import Safe -- for readMay
 import GHCJS.DOM.Element hiding (error) --for 'change'
 import Data.List (nub, elemIndex)
+import qualified Data.Text as T
 
 -- Anytime an event is received issue another event of a given constant value.
 constEvent :: Reflex t => a -> Event t b -> Event t a
@@ -25,13 +28,13 @@ matchEvent a b = fmap (const  b) . ffilter (==a)
 
 -- a button that, instead of producing Event t (), produces an event of
 -- some constant value
-button' :: (MonadWidget t m) => String -> a -> m (Event t a)
+button' :: (MonadWidget t m) => T.Text -> a -> m (Event t a)
 button' t r = do
   x <- button t
   return $ fmap (const r) x
 
 -- Button With Dynamic attributes
-buttonDynAttrs :: MonadWidget t m => String -> a -> Dynamic t (Map String String)-> m (Event t a)
+buttonDynAttrs :: MonadWidget t m => T.Text -> a -> Dynamic t (Map T.Text T.Text)-> m (Event t a)
 buttonDynAttrs s val attrs = do
   (e, _) <- elDynAttr' "button" attrs $ text s
   let event = domEvent Click e
@@ -42,7 +45,8 @@ buttonDynAttrs s val attrs = do
 -- to String tuples. The first String of the tuple indicates a subheader,
 -- and the second indicates the selectable item under it. DropdownConfig options
 -- expect the same as with a regular dropdown
-dropdownOpts :: (MonadWidget t m) => Int -> Map Int (String,String) ->  DropdownConfig t Int -> m (Dropdown t Int)
+{-
+dropdownOpts :: (MonadWidget t m) => Int -> Map Int (T.Text,T.Text) ->  DropdownConfig t Int -> m (Dropdown t Int)
 dropdownOpts k0 setUpMap (DropdownConfig setK attrs) = do
   let options = fromList $ zip (keys setUpMap) $ fmap snd $ elems setUpMap
   let optGroups = fromList $ zip (keys setUpMap) $ fmap fst $ elems setUpMap
@@ -52,7 +56,7 @@ dropdownOpts k0 setUpMap (DropdownConfig setK attrs) = do
     listWithKey optionsWithDefault $ \k v -> do
       if not (elem k optGroupPositions) then blank else do
         elAttr "optgroup" ("label"=:(maybe "" id $ Data.Map.lookup k optGroups)) $ blank
-      elAttr "option" ("value" =: show k <> if k == k0 then "selected" =: "selected" else mempty) $ dynText v
+      elAttr "option" ("value" =: (T.pack . show) k <> if k == k0 then "selected" =: "selected" else mempty) $ dynText v
   let e = castToHTMLSelectElement $ _el_element eRaw
   performEvent_ $ fmap (Select.setValue e . Just . show) setK
   eChange <- wrapDomEvent e (`on` change) $ do
@@ -64,6 +68,7 @@ dropdownOpts k0 setUpMap (DropdownConfig setK attrs) = do
         return k
   dValue <- mapDyn readKey =<< holdDyn (Just k0) (leftmost [eChange, fmap Just setK])
   return $ Dropdown dValue (fmap readKey eChange) -- @clean this.
+-}
 
   --
   -- errorMessageWidget::MonadWidget t m => Sound -> Event t ContainerSignal ->  m (Dynamic t (Sound, Event t GenericSignal))

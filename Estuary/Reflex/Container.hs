@@ -1,15 +1,16 @@
-{-# LANGUAGE RecursiveDo #-}
+{-# LANGUAGE RecursiveDo, OverloadedStrings #-}
 module Estuary.Reflex.Container where
 
 -- The Estuary.Reflex namespace is for definitions that extend Reflex or
 -- Reflex.Dom in ways that do not involve types specific to Estuary (or Tidal).
 -- For example, as in this module, new container widgets for arbitrary widgets.
 
-import Reflex.Dom
+import Reflex hiding (difference)
+import qualified Reflex.Dom as R
 import GHCJS.DOM.EventM
 import Data.Map
 import Data.Bool
-import Reflex
+
 --import Estuary.Widgets.Generic -- for (EditSignal a)
 import Estuary.Reflex.Utility
 import Data.Functor.Misc -- For Const2
@@ -17,19 +18,19 @@ import Control.Monad
 import Data.Maybe
 
 
-widgetMap :: (MonadWidget t m,Ord k) => Map k (m a) -> Event t (Map k (m a)) -> m (Dynamic t (Map k a))
+widgetMap :: (R.MonadWidget t m,Ord k) => Map k (m a) -> R.Event t (Map k (m a)) -> m (R.Dynamic t (Map k a))
 widgetMap iMap rebuild = do
   let iWidget = sequence $ elems iMap -- :: m [a]
   let rebuild' = fmap (sequence . elems) rebuild -- :: Event t (m [a])
-  widgets <- widgetHold iWidget rebuild' -- :: m (Dynamic t [a])
+  widgets <- R.widgetHold iWidget rebuild' -- :: m (Dynamic t [a])
   keys <- holdDyn (keys iMap) (fmap keys rebuild) -- :: m (Dynamic t [k])
   combineDyn (\a b -> fromList $ zip a b) keys widgets
 
-container' :: (Ord k, Num k, MonadWidget t m)
+container' :: (Ord k, Num k, R.MonadWidget t m)
   => (v -> m a) -- a builder function from
   -> Map k v -- an initial map of values
-  -> Event t (Map k (Construction v)) -- construction events
-  -> m (Dynamic t (Map k a))
+  -> R.Event t (Map k (Construction v)) -- construction events
+  -> m (R.Dynamic t (Map k a))
 
 container' build iMap cEvents = do
   let iMap' = fmap build iMap
@@ -66,12 +67,12 @@ constructionDiff oldMap cMap = unions [deletions,additions,changes]
         additions = fmap (Just) $ difference newMap oldMap -- keys only in newMap are additions
         changes = fmap (Just) $ intersection newMap $ Data.Map.filter (id) $ intersectionWith (/=) oldMap newMap
 
-container :: (Ord k, Num k, Show k, Eq v, Show v, MonadWidget t m)
+container :: (Ord k, Num k, Show k, Eq v, Show v, R.MonadWidget t m)
    => Map k v                                -- a map of initial values
-   -> Event t (Map k (Construction v))       -- construction events (replace/insert/delete)
-   -> Event t (Map k w)                      -- signaling events to be delivered to child widgets
-   -> (v -> Event t w -> m (Dynamic t (v,Event t x)))                -- function to make a widget given initial value and signaling event
-   -> m ( (Dynamic t (Map k v)) , Event t (Map k x) )
+   -> R.Event t (Map k (Construction v))       -- construction events (replace/insert/delete)
+   -> R.Event t (Map k w)                      -- signaling events to be delivered to child widgets
+   -> (v -> R.Event t w -> m (R.Dynamic t (v,R.Event t x)))                -- function to make a widget given initial value and signaling event
+   -> m ( (R.Dynamic t (Map k v)) , R.Event t (Map k x) )
 
 container initialValue cEvents rEvents mkChild = mdo
   let cEventsIn = traceEvent "cEventsIn" cEvents
@@ -79,24 +80,24 @@ container initialValue cEvents rEvents mkChild = mdo
   let cEvents' = traceEvent "cEvents'" $ attachDynWith (constructionDiff) existingMap' cEventsIn
   let selector = fanMap rEvents
   let mkChild' k v = mkChild v $ select selector $ (Const2 k)
-  widgets <- liftM (joinDynThroughMap) $ listHoldWithKey initialValue cEvents' mkChild' -- Dynamic t (Map k (v,Event t x))
+  widgets <- liftM (joinDynThroughMap) $ R.listHoldWithKey initialValue cEvents' mkChild' -- Dynamic t (Map k (v,Event t x))
   values <- mapDyn (fmap (fst)) widgets
   events <- liftM (switchPromptlyDyn) $ mapDyn (mergeMap . fmap (snd)) widgets
   return (values,events)
 
 
-eitherContainer :: (Ord k, Num k, Show k, Eq v, Eq a, MonadWidget t m)
+eitherContainer :: (Ord k, Num k, Show k, Eq v, Eq a, R.MonadWidget t m)
    => Map k (Either v a)                               -- a map of initial values
-   -> Event t (Map k (Construction (Either v a)))       -- construction events (replace/insert/delete)
-   -> Event t (Map k w)                                -- signaling events to be delivered to child widgets of type v
-   -> Event t (Map k b)                                -- signaling events to be delivered to child widgets of type a
-   -> (v -> Event t w -> m (Dynamic t (v,Event t e)))  -- function to build widgets for type v (returning events of type e)
-   -> (a -> Event t b -> m (Dynamic t (a,Event t e)))  -- function to build widgets for type a (also returning events of type e)
-   -> m ( (Dynamic t (Map k (Either v a))) , Event t (Map k e) )
+   -> R.Event t (Map k (Construction (Either v a)))       -- construction events (replace/insert/delete)
+   -> R.Event t (Map k w)                                -- signaling events to be delivered to child widgets of type v
+   -> R.Event t (Map k b)                                -- signaling events to be delivered to child widgets of type a
+   -> (v -> R.Event t w -> m (R.Dynamic t (v,R.Event t e)))  -- function to build widgets for type v (returning events of type e)
+   -> (a -> R.Event t b -> m (R.Dynamic t (a,R.Event t e)))  -- function to build widgets for type a (also returning events of type e)
+   -> m ( (R.Dynamic t (Map k (Either v a))) , R.Event t (Map k e) )
 
 eitherContainer initialValues cEvents eventsToLeft eventsToRight buildLeft buildRight = mdo
   let cEvents' = attachDynWith (constructionDiff) values cEvents
-  widgets <- liftM (joinDynThroughMap) $ listHoldWithKey initialValues cEvents' mkChild
+  widgets <- liftM (joinDynThroughMap) $ R.listHoldWithKey initialValues cEvents' mkChild
   values <- mapDyn (fmap (fst)) widgets
   events <- liftM (switchPromptlyDyn) $ mapDyn (mergeMap . fmap (snd)) widgets
   return (values,events)
@@ -147,32 +148,32 @@ widgetAndSpace ::
 -- eitherContainer' is a variant of eitherContainer where the difference is that
 -- only left values (not right) are included in the dynamic result:
 
-eitherContainer' :: (Ord k, Num k, Show k, Eq v, Eq a, MonadWidget t m)
+eitherContainer' :: (Ord k, Num k, Show k, Eq v, Eq a, R.MonadWidget t m)
    => Map k (Either v a)                               -- a map of initial values
-   -> Event t (Map k (Construction (Either v a)))      -- construction events (replace/insert/delete)
-   -> Event t (Map k w)                                -- signaling events to be delivered to child widgets of type v
-   -> Event t (Map k b)                                -- signaling events to be delivered to child widgets of type a
-   -> (v -> Event t w -> m (Dynamic t (v,Event t e)))  -- function to build widgets for type v (returning events of type x)
-   -> (a -> Event t b -> m (Dynamic t (a,Event t e)))  -- function to build widgets for type a (returning events of type c)
-   -> m ( (Dynamic t (Map k v)) , Event t (Map k e) )
+   -> R.Event t (Map k (Construction (Either v a)))      -- construction events (replace/insert/delete)
+   -> R.Event t (Map k w)                                -- signaling events to be delivered to child widgets of type v
+   -> R.Event t (Map k b)                                -- signaling events to be delivered to child widgets of type a
+   -> (v -> R.Event t w -> m (R.Dynamic t (v,R.Event t e)))  -- function to build widgets for type v (returning events of type x)
+   -> (a -> R.Event t b -> m (R.Dynamic t (a,R.Event t e)))  -- function to build widgets for type a (returning events of type c)
+   -> m ( (R.Dynamic t (Map k v)) , R.Event t (Map k e) )
 eitherContainer' initialValues cEvents eventsToLeft eventsToRight buildLeft buildRight = do
   (d,e) <- eitherContainer initialValues cEvents eventsToLeft eventsToRight buildLeft buildRight
   d' <- mapDyn (Data.Map.mapMaybe (either (Just) (const Nothing))) d
   return (d',e)
 
 
-eitherContainer'' :: (Ord k, Num k, Show k, Eq v, Eq a, MonadWidget t m)
+eitherContainer'' :: (Ord k, Num k, Show k, Eq v, Eq a, R.MonadWidget t m)
    => Map k (Either v a)                               -- a map of initial values
-   -> Event t (Map k (Construction (Either v a)))       -- construction events (replace/insert/delete)
-   -> Event t (Map k w)                                -- signaling events to be delivered to child widgets of type v
-   -> Event t (Map k b)                                -- signaling events to be delivered to child widgets of type a
-   -> (v -> Event t w -> m (Dynamic t (v,Event t e,Event t h)))  -- function to build widgets for type v (returning events of type e and f)
-   -> (a -> Event t b -> m (Dynamic t (a,Event t e,Event t h)))  -- function to build widgets for type a (also returning events of type e and f)
-   -> m ( (Dynamic t (Map k (Either v a))) , Event t (Map k e), Event t h)
+   -> R.Event t (Map k (Construction (Either v a)))       -- construction events (replace/insert/delete)
+   -> R.Event t (Map k w)                                -- signaling events to be delivered to child widgets of type v
+   -> R.Event t (Map k b)                                -- signaling events to be delivered to child widgets of type a
+   -> (v -> R.Event t w -> m (R.Dynamic t (v,R.Event t e,R.Event t h)))  -- function to build widgets for type v (returning events of type e and f)
+   -> (a -> R.Event t b -> m (R.Dynamic t (a,R.Event t e,R.Event t h)))  -- function to build widgets for type a (also returning events of type e and f)
+   -> m ( (R.Dynamic t (Map k (Either v a))) , R.Event t (Map k e), R.Event t h)
 
 eitherContainer'' initialValues cEvents eventsToLeft eventsToRight buildLeft buildRight = mdo
   let cEvents' = attachDynWith (constructionDiff) values cEvents
-  widgets <- liftM (joinDynThroughMap) $ listHoldWithKey initialValues cEvents' mkChild
+  widgets <- liftM (joinDynThroughMap) $ R.listHoldWithKey initialValues cEvents' mkChild
   values <- mapDyn (fmap (\(x,_,_) -> x)) widgets
   eEvents <- liftM (switchPromptlyDyn) $ mapDyn (mergeMap . fmap (\(_,x,_) -> x)) widgets
   hEvents <- liftM (switchPromptlyDyn) $ mapDyn (leftmost . elems . fmap (\(_,_,x) -> x)) widgets
@@ -181,14 +182,14 @@ eitherContainer'' initialValues cEvents eventsToLeft eventsToRight buildLeft bui
     mkChild k (Left x) = buildLeft x (select (fanMap eventsToLeft) (Const2 k)) >>= mapDyn (\(v,e,f)->(Left v,e,f))
     mkChild k (Right x) = buildRight x (select (fanMap eventsToRight) (Const2 k)) >>= mapDyn (\(a,e,f)->(Right a,e,f))
 
-eitherContainer''' :: (Ord k, Num k, Show k, Eq v, Eq a, MonadWidget t m)
+eitherContainer''' :: (Ord k, Num k, Show k, Eq v, Eq a, R.MonadWidget t m)
    => Map k (Either v a)                               -- a map of initial values
-   -> Event t (Map k (Construction (Either v a)))      -- construction events (replace/insert/delete)
-   -> Event t (Map k w)                                -- signaling events to be delivered to child widgets of type v
-   -> Event t (Map k b)                                -- signaling events to be delivered to child widgets of type a
-   -> (v -> Event t w -> m (Dynamic t (v,Event t e,Event t h)))  -- function to build widgets for type v (returning events of type e and f)
-   -> (a -> Event t b -> m (Dynamic t (a,Event t e,Event t h)))  -- function to build widgets for type a (returning events of type e and f)
-   -> m ( Dynamic t (Map k v) , Event t (Map k e), Event t h)
+   -> R.Event t (Map k (Construction (Either v a)))      -- construction events (replace/insert/delete)
+   -> R.Event t (Map k w)                                -- signaling events to be delivered to child widgets of type v
+   -> R.Event t (Map k b)                                -- signaling events to be delivered to child widgets of type a
+   -> (v -> R.Event t w -> m (R.Dynamic t (v,R.Event t e,R.Event t h)))  -- function to build widgets for type v (returning events of type e and f)
+   -> (a -> R.Event t b -> m (R.Dynamic t (a,R.Event t e,R.Event t h)))  -- function to build widgets for type a (returning events of type e and f)
+   -> m ( R.Dynamic t (Map k v) , R.Event t (Map k e), R.Event t h)
 eitherContainer''' initialValues cEvents eventsToLeft eventsToRight buildLeft buildRight = do
   (d,e,h) <- eitherContainer'' initialValues cEvents eventsToLeft eventsToRight buildLeft buildRight
   d' <- mapDyn (Data.Map.mapMaybe (either (Just) (const Nothing))) d
@@ -218,25 +219,25 @@ eitherContainer'' i cEvents lBuild rBuild = mdo
     build _ (Right a) = rBuild a >>= mapDyn (\c-> Right c)
 -}
 
-eitherWidget :: (MonadWidget t m)
-  => (a -> Event t c -> m (Dynamic t (a,Event t d)))
-  -> (b -> Event t c -> m (Dynamic t (b,Event t d)))
-  -> Either a b -> Event t c -> m (Dynamic t ((Either a b),Event t d))
+eitherWidget :: (R.MonadWidget t m)
+  => (a -> R.Event t c -> m (R.Dynamic t (a,R.Event t d)))
+  -> (b -> R.Event t c -> m (R.Dynamic t (b,R.Event t d)))
+  -> Either a b -> R.Event t c -> m (R.Dynamic t ((Either a b),R.Event t d))
 
 eitherWidget buildA buildB iValue c = either buildA' buildB' iValue
   where
     buildA' a = buildA a c >>= mapDyn (\(x,d) -> (Left x,d))
     buildB' b = buildB b c >>= mapDyn (\(x,d) -> (Right x,d))
 
-wfor :: (MonadWidget t m) => [a] -> (a -> m (Dynamic t b)) -> m (Dynamic t [b])
+wfor :: (R.MonadWidget t m) => [a] -> (a -> m (R.Dynamic t b)) -> m (R.Dynamic t [b])
 wfor iVals mkChild = do
-  widgets <- liftM (joinDynThroughMap) $ listHoldWithKey iMap never mkChild' -- m (Dynamic t [b]))
+  widgets <- liftM (joinDynThroughMap) $ R.listHoldWithKey iMap never mkChild' -- m (Dynamic t [b]))
   mapDyn elems widgets
   where
     iMap = fromList $ zip [(0::Int)..] iVals
     mkChild' _ a = mkChild a
 
-wmap :: (MonadWidget t m) => (a -> m (Dynamic t b)) -> [a] -> m (Dynamic t [b])
+wmap :: (R.MonadWidget t m) => (a -> m (R.Dynamic t b)) -> [a] -> m (R.Dynamic t [b])
 wmap = flip wfor
 
 -- resettableWidget: given a standard Estuary widget function, produce a
@@ -246,8 +247,8 @@ wmap = flip wfor
 -- resettableWidget widget i e reset = liftM (joinDyn) $ widgetHold (widget i e) $ fmap (\x -> widget x e) reset
 -- after a merge conflict... believe the more general version below holds
 
-resettableWidget :: MonadWidget t m => (a -> Event t b -> m (Dynamic t c)) -> a -> Event t b -> Event t a -> m (Dynamic t c)
-resettableWidget f i e reset = liftM (joinDyn) $ widgetHold (f i e) $ fmap (\x -> f x e) reset
+resettableWidget :: R.MonadWidget t m => (a -> R.Event t b -> m (R.Dynamic t c)) -> a -> R.Event t b -> R.Event t a -> m (R.Dynamic t c)
+resettableWidget f i e reset = liftM (joinDyn) $ R.widgetHold (f i e) $ fmap (\x -> f x e) reset
 
 {-
 makeResettableWidget ::  MonadWidget t m => (a -> Event t b -> m (Dynamic t (a,Event t (EditSignal a)))) -> a -> Event t b -> m (Dynamic t (a,Event t (EditSignal a)))
@@ -259,20 +260,22 @@ makeResettableWidget b i e = mdo
   mapDyn (\(x,_) -> (x,otherEvents)) val
 -}
 
-popup :: MonadWidget t m => Event t (Maybe (m (Event t a))) -> m (Event t a)
+popup :: R.MonadWidget t m => R.Event t (Maybe (m (R.Event t a))) -> m (R.Event t a)
 popup buildEvents = do
   let buildEvents' = fmap (maybe (return never) id) buildEvents
-  liftM (switchPromptlyDyn) $ widgetHold (return never) buildEvents'
+  liftM (switchPromptlyDyn) $ R.widgetHold (return never) buildEvents'
 
 
 -- the following three definitions are just an example of using 'popup' above to implement a popup menu
 -- they should probably be moved to an examples folder sometime soon...
 
-clickableWhiteSpace :: MonadWidget t m => m (Event t ())
+{-
+clickableWhiteSpace :: R.MonadWidget t m => m (R.Event t ())
 clickableWhiteSpace = do
-  (element,_) <- elAttr' "div" (singleton "class" "clickableWhiteSpace") $ text "clickableWhiteSpace"
-  clickEv <- wrapDomEvent (_el_element element) (onEventName Click) (mouseXY)
+  (element,_) <- R.elAttr' "div" (singleton "class" "clickableWhiteSpace") $ R.text "clickableWhiteSpace"
+  clickEv <- R.wrapDomEvent (R._el_element element) (R.onEventName R.Click) (mouseXY)
   return $ (() <$) clickEv
+-}
 
-flippableWidget :: MonadWidget t m => m a -> m a -> Bool -> Event t Bool -> m (Dynamic t a)
-flippableWidget b1 b2 i e = widgetHold (bool b1 b2 i) $ fmap (bool b1 b2) e
+flippableWidget :: R.MonadWidget t m => m a -> m a -> Bool -> R.Event t Bool -> m (R.Dynamic t a)
+flippableWidget b1 b2 i e = R.widgetHold (bool b1 b2 i) $ fmap (bool b1 b2) e

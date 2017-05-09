@@ -71,6 +71,20 @@ EstuaryProtocol.prototype.onMessage = function(m) {
   }
 }
 
+EstuaryProtocol.prototype.getTextEdit = function(n) {
+  if(n < this.textEdits.length) {
+    return this.textEdits[n];
+  }
+  return null;
+}
+
+EstuaryProtocol.prototype.getEstuaryEdit = function(n) {
+  if(n < this.estuaryEdits.length) {
+    return this.estuaryEdits[n];
+  }
+  return null;
+}
+
 EstuaryProtocol.prototype.send = function(o) {
   if(!this.wsReady)return;
   try {

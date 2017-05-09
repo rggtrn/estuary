@@ -1,3 +1,5 @@
+{-# LANGUAGE RecursiveDo, OverloadedStrings #-}
+
 module Estuary.Widgets.WebDirt where
 
 import Reflex

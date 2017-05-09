@@ -12,6 +12,7 @@ import qualified GHCJS.Marshal.Pure as P
 import JavaScript.Object.Internal as O
 import GHCJS.Foreign.Internal
 import GHCJS.Marshal.Pure
+import qualified Data.Text as T
 
 --foreign import javascript unsafe
 --  "$r = new WebDirt('WebDirt/sampleMap.json','Dirt/samples',null, function() {console.log('callback from WebDirt constructor completed');});"
@@ -75,7 +76,7 @@ foreign import javascript unsafe
   "$1.syncWithEsp($2)"
   syncWithEsp' :: T.JSVal -> T.JSVal -> IO ()
 
-syncWithEsp :: T.JSVal -> String -> IO ()
+syncWithEsp :: T.JSVal -> T.Text -> IO ()
 syncWithEsp webDirt url = syncWithEsp' webDirt (pToJSVal url)
 
 foreign import javascript unsafe
