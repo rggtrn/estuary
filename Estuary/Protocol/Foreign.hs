@@ -10,18 +10,38 @@ import qualified GHCJS.Marshal.Pure as P
 import JavaScript.Object.Internal as O
 import GHCJS.Foreign.Internal
 import GHCJS.Marshal.Pure
+import Text.JSON
+
+import Estuary.Types.Request
+import Estuary.Types.Response
 
 foreign import javascript unsafe
   "__debugEstuaryProtocol = new EstuaryProtocol(); $r = __debugEstuaryProtocol"
-  estuaryProtocolFFI :: IO T.JSVal
+  estuaryProtocol_ :: IO T.JSVal
 
 foreign import javascript unsafe
   "$1.setUrl($2)"
-  setUrlFFI :: T.JSVal -> T.JSVal -> IO ()
+  setUrl_ :: T.JSVal -> T.JSVal -> IO ()
+
+foreign import javascript unsafe
+  "$r = location.hostname"
+  getHostName_ :: IO T.JSVal
+
+foreign import javascript unsafe
+  "$r = location.port"
+  getPort_ :: IO T.JSVal
 
 foreign import javascript unsafe
   "$1.send($2)"
-  sendFFI :: T.JSVal -> T.JSVal -> IO ()
+  send_ :: T.JSVal -> T.JSVal -> IO ()
+
+foreign import javascript unsafe
+  "$r = $1.getResponses()"
+  getResponses_ :: T.JSVal -> IO T.JSVal
+
+foreign import javascript unsafe
+  "$r = $1.status"
+  getStatus_ :: T.JSVal -> IO T.JSVal
 
 foreign import javascript unsafe
   "$r = $1.getTextEdit($2)"
@@ -34,15 +54,27 @@ foreign import javascript unsafe
 data EstuaryProtocolObject = EstuaryProtocolObject T.JSVal
 
 estuaryProtocol :: IO EstuaryProtocolObject
-estuaryProtocol = do
-  x <- estuaryProtocolFFI
-  return $ EstuaryProtocolObject x
+estuaryProtocol = EstuaryProtocolObject <$> estuaryProtocol_ 
 
 setUrl :: EstuaryProtocolObject -> String -> IO ()
-setUrl (EstuaryProtocolObject x) url = setUrlFFI x (Prim.toJSString url)
+setUrl (EstuaryProtocolObject x) url = setUrl_ x (Prim.toJSString url)
 
 send :: EstuaryProtocolObject -> String -> IO ()
-send (EstuaryProtocolObject x) y = sendFFI x (Prim.toJSString y)
+send (EstuaryProtocolObject x) y = send_ x (Prim.toJSString y)
+
+getResponses :: EstuaryProtocolObject -> IO (Either String [ServerResponse]) -- left=parsing error right=responses
+getResponses (EstuaryProtocolObject x) = (f . decode . Prim.fromJSString) <$> getResponses_ x
+  where f (Ok xs) = Right xs
+        f (Error x) = Left $ "error trying to parse as [EstuaryProtocol]: " ++ x
+
+getStatus :: EstuaryProtocolObject -> IO String
+getStatus (EstuaryProtocolObject j) = Prim.fromJSString <$> getStatus_ j 
+
+getHostName :: IO String
+getHostName = Prim.fromJSString <$> getHostName_ 
+
+getPort :: IO String
+getPort = Prim.fromJSString <$> getPort_
 
 getTextEdit :: EstuaryProtocolObject -> Int -> IO String
 getTextEdit (EstuaryProtocolObject x) n = Prim.fromJSString (getTextEditFFI x n)

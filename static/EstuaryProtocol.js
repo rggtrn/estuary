@@ -1,7 +1,8 @@
 EstuaryProtocol = function () {
+  this.status = "initializing...";
   this.wsReady = false;
-  this.textEdits = new Array;
-  this.estuaryEdits = new Array;
+  this.responses = new Array;
+  this.setUrl("ws://" + location.hostname + ":8001" /* + location.port */);
 }
 
 EstuaryProtocol.prototype.setUrl = function(x) {
@@ -13,22 +14,27 @@ EstuaryProtocol.prototype.setUrl = function(x) {
   this.connect();
 }
 
+EstuaryProtocol.prototype.log = function(x) {
+  console.log("EstuaryProtocol: " + x);
+  this.status = x;
+}
+
 EstuaryProtocol.prototype.connect = function() {
-  console.log("EstuaryProtocol: opening websocket connection to " + this.url + "...");
+  this.log("opening connection to " + this.url + "...");
   window.WebSocket = window.WebSocket || window.MozWebSocket;
   var closure = this;
   try {
     this.ws = new WebSocket(this.url);
     this.ws.onopen = function () {
-      console.log("EstuaryProtocol: websocket connection opened");
+      closure.log("connection open");
       closure.wsReady = true;
     };
     this.ws.onerror = function () {
-      console.log("EstuaryProtocol: websocket error");
+      closure.log("error");
       closure.wsReady = false;
     };
     this.ws.onclose = function () {
-      console.log("EstuaryProtocol: websocket closed (retrying in 1 second)");
+      closure.log("closed (retrying in 1 second)");
       closure.wsReady = false;
       closure.ws = null;
       setTimeout(function() {
@@ -40,7 +46,7 @@ EstuaryProtocol.prototype.connect = function() {
     }
   }
   catch(e) {
-    console.log("disregarding exception in new WebSocket (retry in 1 second)");
+    this.log("exception in new WebSocket (retry in 1 second)");
     setTimeout(function() {
       closure.connect();
     },1000);
@@ -48,27 +54,15 @@ EstuaryProtocol.prototype.connect = function() {
 }
 
 EstuaryProtocol.prototype.onMessage = function(m) {
-  try {
-   var n = JSON.parse(m.data);
-   if(n.TextEdit != null) {
-     console.log("EstuaryProtocol onMessage TextEdit" + parseInt(n.TextEdit));
-     this.textEdits[parseInt(n.TextEdit)] = n.code;
+   try {
+     var n = JSON.parse(m.data);
    }
-   else if(n.TextEval != null) {
-     // console.log("EstuaryProtocol onMessage TextEval" + n.TextEval);
-     // no need to log textevals in the browser for now
+   catch(e) {
+     this.log("parsing exception in onMessage");
+     console.log("dump: " + JSON.stringify(m.data));
+     return;
    }
-   else if(n.EstuaryEdit != null) {
-     console.log("EstuaryProtocol onMessage EstuaryEdit" + parseInt(n.EstuaryEdit));
-     this.estuaryEdits[parseInt(n.EstuaryEdit)] = n.code;
-   }
-   else {
-     console.log("warning: unrecognized message in EstuaryProtocol onMessage");
-   }
-  }
-  catch(e) {
-   console.log("exception in EstuaryProtocol onMessage");
-  }
+   this.responses.push(n);
 }
 
 EstuaryProtocol.prototype.getTextEdit = function(n) {
@@ -91,6 +85,12 @@ EstuaryProtocol.prototype.send = function(o) {
     this.ws.send(JSON.stringify(o));
   }
   catch(e) {
-    console.log("EstuaryProtocol: warning - exception in websocket send");
+    this.log("warning - exception in websocket send");
   }
+}
+
+EstuaryProtocol.prototype.getResponses = function() {
+  var x = this.responses;
+  this.responses = new Array;
+  return JSON.stringify(x);
 }

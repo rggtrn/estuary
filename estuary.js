@@ -1,4 +1,4 @@
-"use strict"; 
+"use strict";
 process.title = 'estuary';
 var stderr = process.stderr;
 
@@ -63,8 +63,22 @@ if(password[0]=='-') {
   process.exit(1);
 }
 
+
+var tempoCps = 2.0; // 120 BPM to start
+var tempoAt = (new Date).getTime()/1000;
+var tempoBeat = 0.0; // beat 0 at server launch
+
+function logTempo() {
+  console.log("tempo at " + tempoAt + " is " + tempoCps + " CPS (beat=" + tempoBeat + ")");
+}
+logTempo();
+
 var tcpPort = parsed['tcp-port'];
 if(tcpPort==null) tcpPort = 8002;
+
+var estuaries = new Array;
+var texts = new Array;
+var labels = new Array;
 
 // create HTTP (Express) server
 var server = http.createServer();
@@ -73,59 +87,126 @@ app.use('/',express.static(__dirname +"/Estuary.jsexe",{index: "index.html"}));
 server.on('request',app);
 
 // create WebSocket server
-var wss = new WebSocket.Server({server: server});
+var wss = new WebSocket.Server({server: server,perMessageDeflate: false});
 wss.broadcast = function(data) {
-  for (let i of wss.clients) {
-    try {
-      i.send(data);
+  try {
+    var s = JSON.stringify(data);
+    for (let i of wss.clients) {
+      try {
+        i.send(s);
+      }
+      catch(e) {
+        console.log("warning: exception in websocket broadcast to specific client");
+      }
     }
-    catch(e) {
-      console.log("warning: exception in websocket broadcast");
+  }
+  catch(e) {
+    console.log("warning: exception in stringifying JSON data")
+  }
+};
+wss.broadcastNoOrigin = function(originWs,data) {
+  try {
+    var s = JSON.stringify(data);
+    for (let i of wss.clients) {
+      try {
+	if( i !== originWs) {
+          i.send(s);
+	}
+      }
+      catch(e) {
+        console.log("warning: exception in websocket broadcast to specific client");
+      }
     }
+  }
+  catch(e) {
+    console.log("warning: exception in stringifying JSON data")
   }
 };
 
-
+function sendObject(ws,data) {
+  var s;
+  try {
+    s = JSON.stringify(data);
+  }
+  catch(e) {
+    console.log("warning: exception in sendObject stringifying JSON data");
+    return;
+  }
+  try {
+    ws.send(s);
+  }
+  catch(e) {
+    console.log("warning: exception in sendObject during websocket send");
+  }
+}
+  
 wss.on('connection',function(ws) {
-  // var location = url.parse(ws.upgradeReq.url, true);
   var ip = ws.upgradeReq.connection.remoteAddress;
   console.log("new WebSocket connection: " + ip);
 
+  // send stored state of estuary edit panels, text edit panels and labels to new client
+  for (var k in estuaries) sendObject(ws,{ 'EEdit':parseInt(k), 'c':estuaries[k], p:'' });
+  for (var k in texts) sendObject(ws,{ 'TEdit':parseInt(k), 'c':texts[k], p:'' });
+  for (var k in labels) sendObject(ws,{ 'LEdit':parseInt(k), 't':labels[k], p:'' });
+  
   ws.on('message',function(m) {
       var n;
       try {
         n = JSON.parse(JSON.parse(m));
-        console.log(n);
       }
       catch(e) {
         console.log("exception in processing incoming message (possibly incorrectly formatted JSON)");
         n = {};
       }
-      if(n.password != password) {
-        console.log("request with invalid password from " + ip);
-	console.log("password is: " + password);
-	console.log("received is: " + n.password);
-	console.log("n.TextEdit : " + n.TextEdit);
-	console.log("n.code     : " + n.code);
-	console.log(typeof n);
+      if(n.p != password) {
+        console.log("request with invalid password from " + ip + ", invalid password is " + n.p);
       }
-      else if(n.TextEdit != null) {
-        console.log("TextEdit");
-        var o = { 'TextEdit':n.TextEdit, 'code':n.code, password: '' };
-        try { wss.broadcast(JSON.stringify(o)); }
-        catch(e) { console.log("warning: exception in WebSocket send for TextEdit\n"); }
+      else if(n.TEdit != null) {
+        console.log("TEdit " + n.TEdit + " " + n.c);
+        var o = { 'TEdit':n.TEdit, 'c':n.c, p: '' };
+	texts[n.TEdit] = n.c;
+        wss.broadcastNoOrigin(ws,o);
       }
-      else if(n.TextEval != null) {
-        console.log("TextEval");
-        var o = { 'TextEval':n.TextEval, 'code':n.code, password: '' };
-        try { wss.broadcast(JSON.stringify(o)); }
-        catch(e) { console.log("warning: exception in WebSocket send for TextEval\n"); }
+      else if(n.TEval != null) {
+        console.log("TEval " + n.TEval + " " + n.c);
+        var o = { 'TEval':n.TEval, 'code':n.c, p: '' };
+        wss.broadcastNoOrigin(ws,o);
       }
-      else if(n.EstuaryEdit != null) {
-        console.log("EstuaryEdit");
-        var o = { 'EstuaryEdit':n.EstuaryEdit, 'code':n.code, password: '' };
-        try { wss.broadcast(JSON.stringify(o)); }
-        catch(e) { console.log("warning: exception in WebSocket send for EstuaryEdit\n"); }
+      else if(n.LEdit != null) {
+        console.log("LEdit " + n.LEdit + " " + n.t);
+        var o = { 'LEdit':n.LEdit, 't':n.t, p: '' };
+	labels[parseInt(n.LEdit)] = n.t;
+        wss.broadcastNoOrigin(ws,o);
+      }
+      else if(n.EEdit != null) {
+        console.log("EEdit" + m);
+        var o = { 'EEdit':n.EEdit, 'c':n.c, p: '' };
+	estuaries[n.EEdit] = n.c;
+        wss.broadcastNoOrigin(ws,o);
+      }
+      else if(n.Chat != null) {
+        console.log("Chat from " + n.n + ": " + n.Chat);
+        var o = { Chat:n.Chat, n:n.n, p: '' };
+        wss.broadcast(o);
+      }
+      else if(n.Tempo != null) {
+        console.log("Error: received Tempo message but tempo can only be changed by TempoChange");
+      }
+      else if(n.Change != null) {
+        console.log("Change " + n.TempoChange);
+        // recalculate tempo grid following tempo change
+        var now = (new Date).getTime()/1000; console.log("now = " + now); // time in seconds since 1970
+	console.log("old tempoAt = " + tempoAt);
+        var elapsedTime = now - tempoAt; console.log("elapsedTime = " + elapsedTime);
+        var elapsedBeats = elapsedTime * tempoCps; console.log("elapsedBeats = " + elapsedBeats);
+        var beatAtNow = tempoBeat + elapsedBeats; console.log("beatAtNow = " + beatAtNow);
+        tempoAt = now;
+        tempoCps = n.Change;
+        tempoBeat = beatAtNow;
+        logTempo();
+        // broadcast new tempo grid to all clients
+        var o = { 'Tempo': tempoCps, 'at': tempoAt, 'beat': tempoBeat, p: '' };
+        wss.broadcast(o);
       }
   });
 
