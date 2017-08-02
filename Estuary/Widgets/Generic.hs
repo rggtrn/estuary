@@ -1,6 +1,5 @@
 {-# LANGUAGE RecursiveDo, OverloadedStrings #-}
 
-
 module Estuary.Widgets.Generic where
 
 import Reflex
@@ -11,7 +10,7 @@ import Estuary.Reflex.Utility
 import Data.Map
 import Data.List
 import Estuary.Tidal.Types
-import Data.Text hiding (empty,singleton)
+import Data.Text hiding (empty,singleton,zip)
 
 import Estuary.Reflex.Container
 import Data.Maybe
@@ -83,8 +82,7 @@ isChangeValue _ = False
 clickableDiv :: MonadWidget t m => Text -> m (Event t ())
 clickableDiv label = do
   (element,_) <- elAttr' "div" attr $ text label
-  clickEv <- wrapDomEvent (_el_element element) (`on` Events.click) (mouseXY)
---wrapDomEvent (_el_element element) (onEventName Click) (mouseXY)
+  let clickEv = domEvent Click element
   return $ (() <$) clickEv
   where
     attr = singleton "style" "background-color: gray; display: inline;"
@@ -95,7 +93,7 @@ clickableDiv' label e = liftM (e <$) $ clickableDiv label
 clickableDivClass :: MonadWidget t m => Text -> Text -> m (Event t ())
 clickableDivClass label c = do
   (element,_) <- elAttr' "div" (singleton "class" c) $ text label
-  clickEv <- wrapDomEvent (_el_element element) (onEventName Click) (mouseXY)
+  let clickEv = domEvent Click element
   return $ (() <$) clickEv
 
 clickableDivClass' :: MonadWidget t m => Text -> Text -> a -> m (Event t a)
@@ -105,27 +103,27 @@ clickableDivClass' label c e = liftM (e <$) $ clickableDivClass label c
 clickableDivClass'':: MonadWidget t m => Dynamic t Text -> Text -> a -> m (Event t a)
 clickableDivClass'' label c e = do
   (element, _) <- elAttr' "div" ("class"=:c) $ dynText label
-  clickEv <- wrapDomEvent (_el_element element) (onEventName Click) (mouseXY)
+  let clickEv = domEvent Click element
   return $ (e <$) clickEv
 
 clickableDivAttrs::MonadWidget t m => Text -> a -> Map Text Text -> m (Event t a)
 clickableDivAttrs label val attrs= do
   (element,_) <- elAttr' "div" attrs $ text label
-  clickEv <- wrapDomEvent (_el_element element) (onEventName Click) (mouseXY)
+  let clickEv = domEvent Click element
   return $ (val <$) clickEv
 
 clickableDivAttrs'::MonadWidget t m => Text -> a -> Map Text Text -> x -> y -> m (Dynamic t ((),Event t a))
 clickableDivAttrs' label val attrs _ _= do
   (element,_) <- elAttr' "div" attrs $ text label
-  clickEv <- wrapDomEvent (_el_element element) (onEventName Click) (mouseXY)
+  let clickEv = domEvent Click element
   let event = (val <$) clickEv
   return $ constDyn ((),event)
 
 -- with displayed text that can change
-clickableSpanClass:: MonadWidget t m => Dynamic t String -> String -> a -> m (Event t a)
+clickableSpanClass:: MonadWidget t m => Dynamic t Text -> Text -> a -> m (Event t a)
 clickableSpanClass label c e = do
   (element, _) <- elAttr' "span" ("class"=:c) $ dynText label
-  clickEv <- wrapDomEvent (_el_element element) (onEventName Click) (mouseXY)
+  let clickEv = domEvent Click element
   return $ (e <$) clickEv
 
 pingButton :: MonadWidget t m => Text -> m (Event t ())
@@ -160,14 +158,14 @@ pingDiv' label = do
 tdButtonAttrs:: MonadWidget t m => Text -> a -> Map Text Text -> m (Event t a)
 tdButtonAttrs s val attrs = do
   (element, _) <- elAttr' "td" attrs $ text s
-  clickEv <- wrapDomEvent (_el_element element) (onEventName Click) (mouseXY)
+  let clickEv = domEvent Click element
   return $ ((val) <$) clickEv
 
 -- with displayed text that can change
 tdButtonAttrs':: MonadWidget t m => Dynamic t Text -> a -> Map Text Text -> m (Event t a)
 tdButtonAttrs' s val attrs = do
   (element, _) <- elAttr' "td" attrs $ dynText s
-  clickEv <- wrapDomEvent (_el_element element) (onEventName Click) (mouseXY)
+  let clickEv = domEvent Click element
   return $ ((val) <$) clickEv
 
 tdPingButtonAttrs:: MonadWidget t m => Text -> Map Text Text -> a -> b -> m (Dynamic t ((),Event t (EditSignal ())))
@@ -232,12 +230,12 @@ basicPopup liveness actionList = elClass "div" "popupMenu" $ do
   closeMenu <- clickableDivClass' "close" "noClass" (Nothing)
   return $ leftmost $ events' ++[closeMenu, fmap Just liveWidget]
 
-samplePickerPopup::(MonadWidget t m)=>  Dynamic t Liveness -> Map Int (String,String) -> [EditSignal  String] -> m (Event t (Maybe (EditSignal String)),Event t Hint)
+samplePickerPopup::(MonadWidget t m)=>  Dynamic t Liveness -> Map Int (Text,Text) -> [EditSignal Text] -> m (Event t (Maybe (EditSignal Text)),Event t Hint)
 samplePickerPopup liveness sampleMap actionList  = elClass "div" "popupMenu" $ do
   dd <- dropdownOpts (-1) sampleMap def  --defaults to -1 so that someone can select "~" (the first one) and have it register as a change
   let sampleKey = _dropdown_value dd
   sampleChange <- mapDyn (\x-> maybe ("~") (snd) $ Data.Map.lookup x sampleMap) sampleKey -- Dyn (editsignal String)
-  let popupList = fmap (\x->clickableDivClass' (show x) "noClass" (Just x)) actionList -- [m (Maybe (EditSignal))]
+  let popupList = fmap (\x->clickableDivClass' ((pack . show) x) "noClass" (Just x)) actionList -- [m (Maybe (EditSignal))]
   let events = Control.Monad.sequence popupList  -- m (t a)
   events' <- liftM (id) events
   liveWidget <- livenessCheckboxWidget liveness
@@ -250,7 +248,7 @@ repDivWidget' iVal _ = elClass "span" "repOrDiv" $ mdo
   repTog <- toggle iToggle repDivButton
   showRep <- mapDyn (\x-> if x then " * " else " / ") repTog
   let textAttrs = constDyn $ fromList $ zip ["min", "class"] ["1","repOrDivInput"]
-  textField <- textInput $ def & textInputConfig_attributes .~ textAttrs & textInputConfig_initialValue .~ (show iNum) & textInputConfig_inputType .~"number"
+  textField <- textInput $ def & textInputConfig_attributes .~ textAttrs & textInputConfig_initialValue .~ ((pack . show) iNum) & textInputConfig_inputType .~"number"
   let numTextField = _textInput_value textField
   num <- mapDyn (\str-> if isJust ((readMaybe . unpack) str::Maybe Int) then ((read . unpack) str::Int) else iNum) numTextField
   dynVal <- combineDyn (\tog val -> if tog then Rep val else Div val) repTog num
@@ -267,8 +265,8 @@ repDivWidget'' iVal _ = elClass "span" "repOrDiv" $ mdo
   repTog <- toggle iToggle repDivButton
   showRep <- mapDyn (\x-> if x then " * " else " / ") repTog
   let textAttrs = constDyn $ fromList $ zip ["min", "class"] ["1","repOrDivInput"]
-  textField <- textInput $ def & textInputConfig_attributes .~ textAttrs & textInputConfig_initialValue .~ (show iNum) & textInputConfig_inputType .~"number"
-  let numTextField = _textInput_value textField
+  textField <- textInput $ def & textInputConfig_attributes .~ textAttrs & textInputConfig_initialValue .~ ((pack . show) iNum) & textInputConfig_inputType .~"number"
+  let numTextField = fmap unpack $ _textInput_value textField
   num <- mapDyn (\str-> if isJust (readMaybe str::Maybe Int) then (read str::Int) else iNum) numTextField
   combineDyn (\tog val -> if tog then Rep val else Div val) repTog num
   where

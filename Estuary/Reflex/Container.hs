@@ -107,7 +107,7 @@ eitherContainer initialValues cEvents eventsToLeft eventsToRight buildLeft build
 
 
 -- for widgets returning a 3rd event channel (for hints)
-eitherContainer4 :: (Ord k, Num k, Show k, Eq v, Eq a, MonadWidget t m)
+eitherContainer4 :: (Ord k, Num k, Show k, Eq v, Eq a, R.MonadWidget t m)
    => Map k (Either v a)                               -- a map of initial values
    -> Event t (Map k (Construction (Either v a)))       -- construction events (replace/insert/delete)
    -> Event t (Map k w)                                -- signaling events to be delivered to child widgets of type v
@@ -118,7 +118,7 @@ eitherContainer4 :: (Ord k, Num k, Show k, Eq v, Eq a, MonadWidget t m)
 
 eitherContainer4 initialValues cEvents eventsToLeft eventsToRight buildLeft buildRight = mdo
   let cEvents' = attachDynWith (constructionDiff) values cEvents
-  widgets <- liftM (joinDynThroughMap) $ listHoldWithKey initialValues cEvents' mkChild -- m (Dynamic t (Map k a))
+  widgets <- liftM (joinDynThroughMap) $ R.listHoldWithKey initialValues cEvents' mkChild -- m (Dynamic t (Map k a))
   values <- mapDyn (fmap (\(a,_,_)->a)) widgets
   events <- liftM (switchPromptlyDyn) $ mapDyn (mergeMap . fmap ((\(_,b,_)->b))) widgets
   events2 <- liftM (switchPromptlyDyn) $ mapDyn (leftmost . elems . fmap ((\(_,_,c)->c))) widgets -- @ may drop some messages if multiple hints coincide...

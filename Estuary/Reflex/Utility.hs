@@ -42,10 +42,10 @@ buttonDynAttrs s val attrs = do
 
 -- Creates dropdown Menu with Subheaders
 -- takes a Map of integers (the order everything should be displayed in)
--- to String tuples. The first String of the tuple indicates a subheader,
+-- to String (Text) tuples. The first String of the tuple indicates a subheader,
 -- and the second indicates the selectable item under it. DropdownConfig options
 -- expect the same as with a regular dropdown
-{-
+
 dropdownOpts :: (MonadWidget t m) => Int -> Map Int (T.Text,T.Text) ->  DropdownConfig t Int -> m (Dropdown t Int)
 dropdownOpts k0 setUpMap (DropdownConfig setK attrs) = do
   let options = fromList $ zip (keys setUpMap) $ fmap snd $ elems setUpMap
@@ -57,18 +57,33 @@ dropdownOpts k0 setUpMap (DropdownConfig setK attrs) = do
       if not (elem k optGroupPositions) then blank else do
         elAttr "optgroup" ("label"=:(maybe "" id $ Data.Map.lookup k optGroups)) $ blank
       elAttr "option" ("value" =: (T.pack . show) k <> if k == k0 then "selected" =: "selected" else mempty) $ dynText v
-  let e = castToHTMLSelectElement $ _el_element eRaw
-  performEvent_ $ fmap (Select.setValue e . Just . show) setK
-  eChange <- wrapDomEvent e (`on` change) $ do
-    kStr <- fromMaybe "" <$> Select.getValue e
-    return $ readMay kStr
+
+  -- performEvent_ $ fmap (Select.setValue e . Just . show) setK
+  performEvent_ $ fmap (Select.setValue eRaw . Just . show) setK
+
+  -- let e = castToHTMLSelectElement $ _el_element eRaw
+  -- eChange <- wrapDomEvent e (`on` Change) $ do
+  --  kStr <- fromMaybe "" <$> Select.getValue e
+  --   return $ readMay kStr
+  let eChange = fmap (readMay . T.unpack) $ _selectElement_change eRaw -- Event t (Maybe Int)
+
   let readKey mk = fromMaybe k0 $ do
         k <- mk
         guard $ Data.Map.member k options
         return k
   dValue <- mapDyn readKey =<< holdDyn (Just k0) (leftmost [eChange, fmap Just setK])
   return $ Dropdown dValue (fmap readKey eChange) -- @clean this.
--}
+
+{-  let lookupSelected ks v = do
+        key <- T.readMaybe $ T.unpack v
+        Bimap.lookup key ks
+  let eChange = attachPromptlyDynWith lookupSelected ixKeys $ _selectElement_change eRaw
+  let readKey keys mk = fromMaybe k0 $ do
+        k <- mk
+        guard $ Bimap.memberR k keys
+        return k
+  dValue <- fmap (zipDynWith readKey ixKeys) $ holdDyn (Just k0) $ leftmost [eChange, fmap Just setK]
+  return $ Dropdown dValue (attachPromptlyDynWith readKey ixKeys eChange) -}
 
   --
   -- errorMessageWidget::MonadWidget t m => Sound -> Event t ContainerSignal ->  m (Dynamic t (Sound, Event t GenericSignal))
