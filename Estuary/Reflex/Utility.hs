@@ -48,25 +48,22 @@ buttonDynAttrs s val attrs = do
 
 dropdownOpts :: (MonadWidget t m) => Int -> Map Int (T.Text,T.Text) ->  DropdownConfig t Int -> m (Dropdown t Int)
 dropdownOpts k0 setUpMap (DropdownConfig setK attrs) = do
-  let options = fromList $ zip (keys setUpMap) $ fmap snd $ elems setUpMap
-  let optGroups = fromList $ zip (keys setUpMap) $ fmap fst $ elems setUpMap
+  -- let options = fromList $ zip (keys setUpMap) $ fmap snd $ elems setUpMap
+  let options = fmap snd setupMap
+  -- let optGroups = fromList $ zip (keys setUpMap) $ fmap fst $ elems setUpMap
+  let optGroups = fmap fst setupMap
   let optGroupPositions = fmap (\x-> maybe (0) id $ Data.List.elemIndex x (elems optGroups)) $ nub $ elems optGroups -- [Int]
-  (eRaw, _) <- elDynAttr' "select" attrs $ do
+  modifyAttrs <- dynamicAttributesToModifyAttributes attrs
+  let cfg = def
+        & selectElementConfig_elementConfig . elementConfig_modifyAttributes .~ fmap mapKeysToAttributeName modifyAttrs
+        & selectElementConfig_setValue .~ fmap (T.pack . show) setK
+  (eRaw, _) <- selectElement cfg $ do
     let optionsWithDefault = constDyn $ if Data.Map.lookup k0 options == Nothing then Data.Map.union (k0 =: "") options else options
     listWithKey optionsWithDefault $ \k v -> do
       if not (elem k optGroupPositions) then blank else do
         elAttr "optgroup" ("label"=:(maybe "" id $ Data.Map.lookup k optGroups)) $ blank
       elAttr "option" ("value" =: (T.pack . show) k <> if k == k0 then "selected" =: "selected" else mempty) $ dynText v
-
-  -- performEvent_ $ fmap (Select.setValue e . Just . show) setK
-  performEvent_ $ fmap (Select.setValue eRaw . Just . show) setK
-
-  -- let e = castToHTMLSelectElement $ _el_element eRaw
-  -- eChange <- wrapDomEvent e (`on` Change) $ do
-  --  kStr <- fromMaybe "" <$> Select.getValue e
-  --   return $ readMay kStr
   let eChange = fmap (readMay . T.unpack) $ _selectElement_change eRaw -- Event t (Maybe Int)
-
   let readKey mk = fromMaybe k0 $ do
         k <- mk
         guard $ Data.Map.member k options
