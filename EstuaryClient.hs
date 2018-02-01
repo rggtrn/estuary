@@ -1,4 +1,4 @@
-{-# LANGUAGE RecursiveDo, OverloadedStrings #-}
+{-# LANGUAGE RecursiveDo, OverloadedStrings, JavaScriptFFI #-}
 
 module Main where
 
@@ -19,6 +19,7 @@ import Sound.Tidal.Context (ParamPattern,Tempo(..))
 import Estuary.WebDirt.Foreign
 import Estuary.WebDirt.SuperDirt
 import Estuary.WebDirt.Stream
+import Estuary.WebDirt.ImageDirt
 import Estuary.Widgets.SpecificPattern
 import Estuary.Widgets.Terminal
 import Data.Map
@@ -29,6 +30,8 @@ import Text.JSON
 import Data.Time
 import Text.Read
 import qualified GHCJS.Types as T
+import qualified GHCJS.DOM.Types as G
+import GHCJS.Marshal.Pure (pToJSVal)
 
 import Estuary.Types.Request
 import Estuary.Types.Response
@@ -39,18 +42,46 @@ main = do
   now <- Data.Time.getCurrentTime
   let defaultTempo = Tempo {at=now,beat=0.0,cps=0.5,paused=False,clockLatency=0.2}
   tempo <- newMVar defaultTempo
+  let iDirt = ImageDirt
   wd <- webDirt
   sd <- superDirt
+  idStream <- sampleStream iDirt tempo
   wdStream <- sampleStream wd tempo
   sdStream <- sampleStream sd tempo
   protocol <- estuaryProtocol
-  mainWidget $ estuaryWidget tempo wd wdStream sd sdStream protocol now
+  mainWidget $ estuaryWidget tempo wd wdStream sd sdStream iDirt idStream protocol now
+
+
+drawOurLine :: G.HTMLCanvasElement -> IO ()
+drawOurLine c = do
+  let c' = G.unHTMLCanvasElement c
+  beginPath c'
+  moveTo c' 400 10
+  lineTo c' 415 590
+  strokeStyle c' ("#FFFFFF")
+  stroke c'
+
+foreign import javascript unsafe "$1.getContext('2d').beginPath()" beginPath :: T.JSVal -> IO ()
+foreign import javascript unsafe "$1.getContext('2d').moveTo($2,$3)" moveTo :: T.JSVal -> Int -> Int -> IO ()
+foreign import javascript unsafe "$1.getContext('2d').lineTo($2,$3)" lineTo :: T.JSVal -> Int -> Int -> IO ()
+foreign import javascript unsafe "$1.getContext('2d').stroke()" stroke :: T.JSVal -> IO ()
+foreign import javascript unsafe "$1.getContext('2d').strokeStyle = $2" strokeStyle :: T.JSVal -> T.JSString -> IO()
+
+-- drawOnOurCanvas :: MonadWidget t m => El t -> Event t [DrawingInstruction] -> m ()
+
 
 
 estuaryWidget :: MonadWidget t m =>
   MVar Tempo -> WebDirt -> SampleStream -> SuperDirt -> SampleStream ->
+  ImageDirt -> SampleStream ->
   EstuaryProtocolObject -> UTCTime -> m ()
-estuaryWidget tempo wd wdStream sd sdStream protocol now = divClass "estuary" $ mdo
+estuaryWidget tempo wd wdStream sd sdStream iDirt idStream protocol now = divClass "estuary" $ mdo
+
+  {- (canvas,_ ) <- elAttr' "canvas" (fromList [("class","canvas"),("width","800px"),("height","600px")]) $ return ()
+  postBuild <- getPostBuild -- m Event t ()
+  let blah = fmap (liftIO . (\_ -> drawOurLine (G.castToHTMLCanvasElement $ _el_element canvas))) postBuild -- m (Event t (WidgetHost m ()))
+  performEvent_ blah -- performEvent_ :: MonadWidget t m => Event t (WidgetHost m ()) -> m () -}
+
   (sdOn,wdOn) <- header wsStatus clientCount
   (values,deltasUp,hints) <- divClass "page" $ navigation now commands deltasDown'
   commands <- divClass "chat" $ terminalWidget deltasUp deltasDown'
@@ -64,6 +95,7 @@ estuaryWidget tempo wd wdStream sd sdStream protocol now = divClass "estuary" $ 
   performHint wd hints
   performEvent_ $ fmap (liftIO . wdStream) valuesWd
   performEvent_ $ fmap (liftIO . sdStream) valuesSd
+  performEvent_ $ fmap (liftIO . idStream) $ updated values'
   where f x True = x
         f _ False = toParamPattern EmptyTransformedPattern
 

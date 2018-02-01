@@ -11,6 +11,7 @@ import qualified Control.Exception as E
 import Data.Time
 import qualified Estuary.WebDirt.Foreign as WebDirt
 import qualified Estuary.WebDirt.SuperDirt as SuperDirt
+import qualified Estuary.WebDirt.ImageDirt as ImageDirt
 import qualified GHCJS.Types as T
 import qualified GHCJS.Marshal.Pure as P
 
@@ -25,6 +26,10 @@ instance SampleEngine WebDirt.WebDirt where
 instance SampleEngine SuperDirt.SuperDirt where
   getClockDiff _ = return 0.0
   playSample sd x = SuperDirt.playSample sd x
+
+instance SampleEngine ImageDirt.ImageDirt where
+  getClockDiff _ = return 0.0
+  playSample id x = ImageDirt.playSample id x
 
 type SampleStream = ParamPattern -> IO ()
 

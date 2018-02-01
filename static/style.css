@@ -1,3 +1,10 @@
+canvas {
+background: transparent;
+position: absolute;
+left: 0px;
+top: 0px;
+}
+
 body {
 	background-color: black;
 	color: hsl(120,100%,80%);
