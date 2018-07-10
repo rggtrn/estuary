@@ -12,6 +12,7 @@ build:
   haddock-hyperlink-source: false
 
 allow-newer: true
+allow-different-user: true
 
 packages:
 - '.'
