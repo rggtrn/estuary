@@ -1,4 +1,4 @@
-module Estuary.Languages.Test1 (test1) where
+module Estuary.Languages.Saborts (saborts) where
 
 import Text.ParserCombinators.Parsec
 import Text.ParserCombinators.Parsec.Number
@@ -87,5 +87,5 @@ exprStack = do
    expr <- many lengExpr
    return $ Tidal.stack expr
 
-test1 :: String -> Tidal.ParamPattern
-test1 s = either (const Tidal.silence) id $ parse exprStack "unNombreparaTuLenguage" s
+saborts :: String -> Tidal.ParamPattern
+saborts s = either (const Tidal.silence) id $ parse exprStack "unNombreparaTuLenguage" s
