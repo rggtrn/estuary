@@ -54,7 +54,7 @@ sonidos = choice [
         try (string "7" >> return "7"),
         try (string "8" >> return "8"),
         try (string "9" >> return "9"),
-        try (string "hola coche" >> espacios >> return "diphone" ),
+        try (string "hola choche" >> espacios >> return "diphone" ),
         try (string "unas chelas" >> espacios >> return "dist" ),
         try (string "mi germa" >> espacios >> return "hh:1" ),
         try (string "vamos a" >> espacios >> return "mash2"),
