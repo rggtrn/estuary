@@ -1,77 +1,94 @@
+STACK_CLIENT=cd client/ && stack
+STACK_SERVER=cd server/ && stack
+STACK_PRODUCTION_CLIENT=cd client/ && stack --work-dir .stack-work-production/
+
+CLIENT_INSTALL_DIR=$$($(STACK_CLIENT) path --local-install-root)/bin/Estuary.jsexe
+SERVER_INSTALL_DIR=$$($(STACK_SERVER) path --local-install-root)/bin/EstuaryServer
+PRODUCTION_CLIENT_INSTALL_DIR=$$($(STACK_PRODUCTION_CLIENT) path --local-install-root)/bin/Estuary.jsexe
+
 setupClient:
-	stack setup --stack-yaml=client.yaml
+	$(STACK_CLIENT) setup
 
 buildClient: setupClient
-	stack build --stack-yaml=client.yaml
+	$(STACK_CLIENT) build
+
+EXTERNS=--externs=static/SuperDirt.js --externs=static/EstuaryProtocol.js --externs=static/WebDirt/WebDirt.js --externs=static/WebDirt/SampleBank.js --externs=static/WebDirt/Graph.js
+CLOSURE_COMPILER="java -jar closure-compiler.jar"
+
+prodBuildClient: setupClient
+	$(STACK_PRODUCTION_CLIENT) build --ghc-options="-DGHCJS_BROWSER -O2"
+	"$(CLOSURE_COMPILER)" "$(PRODUCTION_CLIENT_INSTALL_DIR)/all.js" --compilation_level=ADVANCED_OPTIMIZATIONS --jscomp_off=checkVars --js_output_file="$(PRODUCTION_CLIENT_INSTALL_DIR)/all.min.js" $(EXTERNS)
+	gzip -fk "$(PRODUCTION_CLIENT_INSTALL_DIR)/all.min.js"
 
 buildClientForceDirty:
-	stack build --stack-yaml=client.yaml --force-dirty
+	$(STACK_CLIENT) build --force-dirty
 
 setupServer:
-	stack setup --stack-yaml=server.yaml
+	$(STACK_SERVER) setup
 
 buildServer: setupServer
-	stack build --stack-yaml=server.yaml
+	$(STACK_SERVER) build
+
+CLIENT_GCC_PREPROCESSOR=$(STACK_CLIENT) exec -- gcc -E -x c -P -C -nostdinc
 
 installClient: buildClient
-	cp -Rf $$(stack path --local-install-root --stack-yaml=client.yaml)/bin/Estuary.jsexe .
+	cp -Rf $(CLIENT_INSTALL_DIR) .
 	cp -Rf static/* Estuary.jsexe
+	$(CLIENT_GCC_PREPROCESSOR) ../Estuary.jsexe/index.html.template -o ../Estuary.jsexe/index.html
+
+prodInstallClient: # make prodBuildClient first!
+	rm -rf ./Estuary.jsexe
+	cp -Rf $(PRODUCTION_CLIENT_INSTALL_DIR) .
+	cp -Rf static/* Estuary.jsexe
+	$(CLIENT_GCC_PREPROCESSOR) ../Estuary.jsexe/index.html.template -DPRODUCTION -o ../Estuary.jsexe/index.html
+	rm -rf Estuary.jsexe/runmain.js
+	rm -rf Estuary.jsexe/rts.js
+	rm -rf Estuary.jsexe/lib.js
+	rm -rf Estuary.jsexe/out.js
+	rm -rf Estuary.jsexe/all.js
+	rm -rf Estuary.jsexe/out.stats
+	rm -rf Estuary.jsexe/index.html.template
 
 installServer: buildServer
-	cp $$(stack path --local-install-root --stack-yaml=server.yaml)/bin/EstuaryServer ./EstuaryServer
+	mkdir -p EstuaryServer
+	cp $(SERVER_INSTALL_DIR) ./EstuaryServer/EstuaryServer
 
-rggtrn: installClient installServer
-	EstuaryServer/EstuaryServer rggtrn 8002
+prodCleanBuildInstall: prodClean clean prodBuildClient buildServer prodInstallClient installServer
 
-openClient:
-	cp -Rf $$(stack path --local-install-root --stack-yaml=client.yaml)/bin/Estuary.jsexe .
-	cp static/index.html Estuary.jsexe
-	cp static/style.css Estuary.jsexe
-	open Estuary.jsexe/index.html
-
-zipClient:
+releaseClient: # make installClient or prodInstallClient first!
 	rm -rf temp
 	mkdir temp
-	cp package.json temp
-	cp estuary.js temp
-	cp evalClient.js temp
-	cp -Rf $$(stack path --local-install-root --stack-yaml=client.yaml)/bin/Estuary.jsexe temp
-	cp static/index.html temp/Estuary.jsexe
-	cp static/style.css temp/Estuary.jsexe
-	cp static/EstuaryProtocol.js temp/Estuary.jsexe
-	tar czf estuary-build.tgz -C temp .
+	cp -Rf Estuary.jsexe temp
+	rm -rf temp/Estuary.jsexe/Dirt
+	# tar czf estuary-client.tgz -C temp .
+	cd temp; zip -r ../estuary-client.zip ./*
 	rm -rf temp
 
-zipClientWithWebDirt:
-	rm -rf temp
-	mkdir temp
-	cp static/WebDirt/sampleMap.json temp
-	cp evalClient.js temp
-	cp -Rf $$(stack path --local-install-root --stack-yaml=client.yaml)/bin/Estuary.jsexe temp
-	cp static/index.html temp/Estuary.jsexe
-	cp static/style.css temp/Estuary.jsexe
-	cp static/EstuaryProtocol.js temp/Estuary.jsexe
-	cp -Rf static/WebDirt temp/Estuary.jsexe
-	cd temp; zip -r ../estuary-build.zip ./*
-	rm -rf temp
-
-WebDirt:
-	cp -Rf static/WebDirt Estuary.jsexe
+curlReleaseClient: # this uses curl to download and unzip a recent pre-built client from a GitHub release
+	rm -rf Estuary.jsexe
+	curl -o temp.zip -L https://github.com/d0kt0r0/estuary/releases/download/20181028/estuary-client-20181028.zip
+	unzip temp.zip
+	rm -rf temp.zip
+	cp -Rf static/Dirt Estuary.jsexe
 
 clean:
 	rm -rf Estuary.jsexe
-	rm -rf $$(stack path --local-install-root --stack-yaml=client.yaml)/bin
-	rm -rf $$(stack path --local-install-root --stack-yaml=server.yaml)/bin
-	stack clean --stack-yaml=client.yaml
-	stack clean --stack-yaml=server.yaml
+	rm -rf $$($(STACK_CLIENT) path --local-install-root)/bin
+	rm -rf $$($(STACK_SERVER) path --local-install-root)/bin
+	$(STACK_CLIENT) clean
+	$(STACK_SERVER) clean
+
+prodClean: clean
+	$(STACK_PRODUCTION_CLIENT) clean
+
+prodClean: clean
+	stack --work-dir .stack-work-production/ clean --stack-yaml=client.yaml
 
 style:
-	cp static/style.css Estuary.jsexe
+	cp static/classic.css Estuary.jsexe
 
-static:
-	cp -Rf static/* Estuary.jsexe
+test: installClient installServer
+	EstuaryServer/EstuaryServer test
 
-Estuary.jsexe:
-	ghcjs -o Estuary Main.hs
-	cp static/index.html Estuary.jsexe
-	cp static/style.css Estuary.jsexe
+openClient: installClient
+	open Estuary.jsexe/index.html
